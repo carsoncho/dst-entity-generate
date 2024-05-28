@@ -47,9 +47,23 @@ final class DstegConstants {
     ],
     'Text (formatted, long)' => [
       'type' => 'text_long',
+      'dependencies' => [
+        'optional' => [
+          'settings' => [
+            'allowed_formats',
+          ],
+        ],
+      ],
     ],
     'Text (formatted, long, with summary)' => [
       'type' => 'text_with_summary',
+      'dependencies' => [
+        'optional' => [
+          'settings' => [
+            'allowed_formats',
+          ],
+        ],
+      ],
     ],
     'Number (decimal)' => [
       'type' => 'decimal',

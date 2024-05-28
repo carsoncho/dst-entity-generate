@@ -614,6 +614,14 @@ class GeneralApi {
           case 'settings':
             foreach ($dependency_value as $setting_key => $setting_value) {
               switch ($setting_value) {
+                case 'allowed_formats':
+                  // @todo Determine if handler_settings is right. Maybe refactor the ::addField()?
+                  $settings = array_map('trim', explode(',', $field['settings/notes']));
+                  if (!empty($settings[0])) {
+                    $field['settings']['handler_settings']['allowed_formats'] = $settings;
+                  }
+                  break;
+
                 case 'allowed_values':
                   $settings = array_map('trim', explode(',', $field['settings/notes']));
                   $field['settings']['allowed_values'] = array_combine($settings, $settings);
