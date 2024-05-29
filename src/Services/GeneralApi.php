@@ -82,10 +82,10 @@ class GeneralApi {
    *   The module handler.
    */
   public function __construct(LoggerChannelFactoryInterface $logger_factory,
-                              ConfigFactoryInterface $configFactory,
-                              EntityTypeManagerInterface $entityTypeManager,
-                              EntityDisplayRepositoryInterface $displayRepository,
-                              ModuleHandlerInterface $moduleHandler) {
+    ConfigFactoryInterface $configFactory,
+    EntityTypeManagerInterface $entityTypeManager,
+    EntityDisplayRepositoryInterface $displayRepository,
+    ModuleHandlerInterface $moduleHandler) {
 
     $this->logger = $logger_factory->get('dst_entity_generate');
     $this->syncEntities = $configFactory->get('dst_entity_generate.settings')->get('sync_entities');
@@ -201,6 +201,19 @@ class GeneralApi {
       if (is_array($field_data['settings']) && array_key_exists('handler_settings', $field_data['settings'])) {
         $field_configs['settings'] = $field_data['settings']['handler_settings'];
       }
+
+      // Additional config needed for ERR (paragraphs) fields.
+      if (isset($field_data['drupal_field_type']) && $field_data['drupal_field_type'] == 'entity_reference_revisions') {
+        $field_configs['settings']['handler_settings']['negate'] = 0;
+        $paragraph_weight = 0;
+        foreach ($field_configs['settings']['handler_settings']['target_bundles'] as $target_bundle) {
+          $field_configs['settings']['handler_settings']['target_bundles_drag_drop'][$target_bundle] = [
+            'weight' => $paragraph_weight++,
+            'enabled' => TRUE,
+          ];
+        }
+      }
+
       if ($field_data['type'] === 'field_group' && $this->isModuleEnabled('field_group')) {
         $field_settings = [
           'children' => $field_data['children'],
@@ -675,6 +688,18 @@ class GeneralApi {
                       ],
                     ],
                   ];
+
+                  // Paragraph fields have slightly different handler settings.
+                  if ($field['field_type'] == 'Entity reference revisions (paragraphs)') {
+                    $field['settings']['handler_settings'] = [
+                      'handler' => 'default:paragraph',
+                      'handler_settings' => [
+                        'target_bundles' => [
+                          $entity_storage->id() => $entity_storage->id(),
+                        ],
+                      ],
+                    ];
+                  }
                   break;
               }
             }

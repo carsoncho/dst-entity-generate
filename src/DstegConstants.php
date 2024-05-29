@@ -157,6 +157,25 @@ final class DstegConstants {
         ],
       ],
     ],
+    'Entity reference revisions (paragraphs)' => [
+      'type' => 'entity_reference_revisions',
+      'dependencies' => [
+        'required' => [
+          'settings' => [
+            'target_type',
+          ],
+        ],
+        'optional' => [
+          'settings' => [
+            'handler_settings' => [
+              'target_bundles',
+              'negate',
+              'target_bundles_drag_drop'
+            ],
+          ],
+        ],
+      ],
+    ],
     'Fieldset' => [
       'type' => 'field_group',
       'format_type' => 'fieldset',
@@ -342,6 +361,7 @@ final class DstegConstants {
     'File' => 'file_generic',
     'Site Studio layout canvas' => 'cohesion_layout_builder_widget',
     'Link' => 'link_default',
+    'Paragraphs (stable)' => 'paragraphs'
   ];
 
 }
