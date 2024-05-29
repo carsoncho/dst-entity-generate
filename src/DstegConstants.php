@@ -361,7 +361,8 @@ final class DstegConstants {
     'File' => 'file_generic',
     'Site Studio layout canvas' => 'cohesion_layout_builder_widget',
     'Link' => 'link_default',
-    'Paragraphs (stable)' => 'paragraphs'
+    'Paragraphs (stable)' => 'paragraphs',
+    'Media library' => 'media_library_widget',
   ];
 
 }
