@@ -599,28 +599,26 @@ class GeneralApi {
    * Helper function to check field level dependency.
    *
    * @param array $field_meta
-   *   Field meta data.
+   *   Specific field metadata from DstegConstants::FIELD_TYPES.
    * @param array $field
    *   Field array.
    *
    * @return mixed
    *   Returns array or false based on dependency checks.
+   *
+   * @see DstegConstants::FIELD_TYPES
    */
-  public function fieldDependencyCheck(array $field_meta, array $field) {
+  public function fieldDependencyCheck(array $field_meta, array $field): mixed {
     $dependencies = $field_meta['dependencies'];
     foreach ($dependencies as $dependency_type => $dependency) {
       foreach ($dependency as $dependency_key => $dependency_value) {
         switch ($dependency_key) {
           case 'module':
             if (!$this->isModuleEnabled($dependency_value)) {
-              $this->logger->warning($this->t(
-                'The @module module is not installed. Skipping @field field generation.',
-                [
-                  '@module' => $dependency_value,
-                  '@field' => $field['machine_name'],
-                ]
-              ));
-              return FALSE;
+              $this->logWarningAndReturnFalse('The @module module is not installed. Skipping @field field generation.', [
+                '@module' => $dependency_value,
+                '@field' => $field['machine_name'],
+              ]);
             }
             break;
 
@@ -641,65 +639,26 @@ class GeneralApi {
                   break;
 
                 case 'target_type':
-                  $temp = explode(' (', rtrim($field['ref._bundle'], ')'));
-                  $target_bundle = $temp[0];
-                  $target_bundle_type = $temp[1];
+                  [$target_bundles, $target_entity_types] = $this->parseBundlesAndTypes($field['ref._bundle']);
                   $entity_type_mapping = DstegConstants::ENTITY_TYPE_MAPPING;
-                  if (!array_key_exists($target_bundle_type, $entity_type_mapping)) {
-                    $this->logger->warning($this->t(
-                      'The @target_bundle_type is not supported entity type. Skipping @field field generation.',
-                      [
-                        '@target_bundle_type' => $target_bundle_type,
-                        '@field' => $field['machine_name'],
-                      ]
-                    ));
+                  $target_bundle_type = $this->validateEntityTypes($target_entity_types, $entity_type_mapping, $field);
+                  if ($target_bundle_type === FALSE) {
                     return FALSE;
                   }
-                  $entity_type_storage = $this->entityTypeManager->getStorage($entity_type_mapping[$target_bundle_type]['entity_type_id']);
-                  if (empty($entity_type_storage)) {
-                    $this->logger->warning($this->t(
-                      'The @target_bundle_type is invalid or not exist. Skipping @field field generation.',
-                      [
-                        '@target_bundle_type' => $target_bundle_type,
-                        '@field' => $field['machine_name'],
-                      ]
-                    ));
-                    return FALSE;
-                  }
-                  // @todo Machine name should be read from bundles tab.
-                  $target_bundle_machine_name = strtolower(str_replace(" ", "_", $target_bundle));
-                  $entity_storage = $entity_type_storage->load($target_bundle_machine_name);
-                  if (empty($entity_storage)) {
-                    $this->logger->warning($this->t(
-                      'The @target_bundle does not exist. Skipping @field field generation.',
-                      [
-                        '@target_bundle' => $target_bundle,
-                        '@field' => $field['machine_name'],
-                      ]
-                    ));
-                    return FALSE;
-                  }
-                  $field['settings']['target_type'] = $entity_type_mapping[$target_bundle_type]['entity_type'];
-                  $field['settings']['handler_settings'] = [
-                    'handler' => 'default',
-                    'handler_settings' => [
-                      'target_bundles' => [
-                        $entity_storage->id(),
-                      ],
-                    ],
-                  ];
 
-                  // Paragraph fields have slightly different handler settings.
-                  if ($field['field_type'] == 'Entity reference revisions (paragraphs)') {
-                    $field['settings']['handler_settings'] = [
-                      'handler' => 'default:paragraph',
-                      'handler_settings' => [
-                        'target_bundles' => [
-                          $entity_storage->id() => $entity_storage->id(),
-                        ],
-                      ],
-                    ];
+                  $entity_type_id = $entity_type_mapping[$target_bundle_type]['entity_type_id'];
+                  $entity_type_storage = $this->entityTypeManager->getStorage($entity_type_id);
+                  if (empty($entity_type_storage)) {
+                    return $this->logWarningAndReturnFalse('The @target_bundle_type is invalid or not exist. Skipping @field field generation.', [
+                      '@target_bundle_type' => $target_bundle_type,
+                      '@field' => $field['machine_name'],
+                    ]);
                   }
+
+                  $field['settings']['target_type'] = $entity_type_mapping[$target_bundle_type]['entity_type'];
+                  // If we're a paragraph field handler should be `default:paragraph`, `default` otherwise.
+                  $field['settings']['handler_settings'] = ['handler' => $field['field_type'] == 'Entity reference revisions (paragraphs)' ? 'default:paragraph' : 'default'];
+                  $field = $this->setHandlerSettings($field, $target_bundles, $entity_type_storage);
                   break;
               }
             }
@@ -771,4 +730,113 @@ class GeneralApi {
     return $children;
   }
 
+  /**
+   * Helper to parse the string to it's separate parts, Bundle and Entity Type.
+   *
+   * @param string $bundleString
+   *   The raw string to parse. Expected format is "Bundle (Entity Type)" and can
+   *   contain more than one separated by a comma, i.e. "Bundle (Entity Type),
+   *   Bundle (Entity Type)".
+   *
+   * @return array[]
+   *   An array containing two arrays: one the individual target bundles, second
+   *   the array of entity types.
+   */
+  private function parseBundlesAndTypes(string $bundleString): array {
+    $temp_group = explode(',', $bundleString);
+    $target_bundles = [];
+    $target_entity_types = [];
+
+    foreach ($temp_group as $group) {
+      $temp = explode(' (', rtrim($group, ')'));
+      $target_bundles[] = trim($temp[0]);
+      $target_entity_types[] = trim($temp[1]);
+    }
+
+    return [$target_bundles, $target_entity_types];
+  }
+
+  /**
+   * Helper method to log warning and return false.
+   *
+   * @param string $message
+   *   The message to send to the logger. This can include variable parameters.
+   * @param array $context
+   *   (Optional) The context array which supplies the values for any variables
+   *   in the message.
+   *
+   * @return bool
+   *   Returns FALSE.
+   */
+  private function logWarningAndReturnFalse(string $message, array $context = []): bool {
+    $this->logger->warning($message, $context);
+    return FALSE;
+  }
+
+  /**
+   * Validate entity types are currently supported by DEG, and that we are not mixing entity types as Entity Reference fields do not support this.
+   *
+   * @param array $target_entity_types
+   *   The array of target bundles we're trying to support for the ER field.
+   * @param array $entity_type_mapping
+   *   The mapping of the supported entity types from DstegConstants::ENTITY_TYPE_MAPPING.
+   * @param array $field
+   *   The field data array.
+   *
+   * @return bool|string
+   *   The string of the entity type or FALSE if improper.
+   */
+  private function validateEntityTypes(array $target_entity_types, array $entity_type_mapping, array $field): bool|string {
+    foreach ($target_entity_types as $entity_type) {
+      if (!array_key_exists($entity_type, $entity_type_mapping)) {
+        return $this->logWarningAndReturnFalse('The @target_entity_type is not a supported entity type. Skipping @field field generation.', [
+          '@target_entity_type' => $entity_type,
+          '@field' => $field['machine_name'],
+        ]);
+      }
+    }
+
+    $unique_entity_types = array_unique($target_entity_types);
+    if (count($unique_entity_types) > 1) {
+      return $this->logWarningAndReturnFalse('Entity reference fields cannot support multiple entity types. Currently selected @target_entity_types. Double check the DEG spreadsheet to ensure this field is properly configured. Skipping @field field generation.', [
+        '@target_bundle_types' => rtrim(implode(', ', $target_entity_types)),
+        '@field' => $field['machine_name'],
+      ]);
+    }
+
+    return reset($unique_entity_types);
+  }
+
+  /**
+   * Function to set Entity Reference (ER) field handler settings.
+   *
+   * @param array $field
+   *   The field data array from the spreadsheet.
+   * @param array $target_bundles
+   *   The list of entity bundles to set as being allowed for the ER field.
+   * @param \Drupal\Core\Entity\EntityStorageInterface $entity_type_storage
+   *   The loaded entity storage for the specified entity type.
+   *
+   * @return array|bool
+   *   The modified $field data array with the correct ER field settings.
+   */
+  private function setHandlerSettings(array $field, array $target_bundles, $entity_type_storage): array|bool {
+    foreach ($target_bundles as $target_bundle) {
+      $target_bundle_machine_name = strtolower(str_replace(" ", "_", $target_bundle));
+      $entity_storage = $entity_type_storage->load($target_bundle_machine_name);
+      if (empty($entity_storage)) {
+        return $this->logWarningAndReturnFalse('The @target_bundle does not exist. Skipping @field field generation.', [
+          '@target_bundle' => $target_bundle,
+          '@field' => $field['machine_name'],
+        ]);
+      }
+
+      if ($field['field_type'] == 'Entity reference revisions (paragraphs)') {
+        $field['settings']['handler_settings']['handler_settings']['target_bundles'][$entity_storage->id()] = $entity_storage->id();
+      } else {
+        $field['settings']['handler_settings']['handler_settings']['target_bundles'][] = $target_bundle_machine_name;
+      }
+    }
+    return $field;
+  }
 }
