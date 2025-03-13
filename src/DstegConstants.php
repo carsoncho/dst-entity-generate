@@ -338,6 +338,9 @@ final class DstegConstants {
     DstegConstants::WORKFLOWS => ['workflows', 'content_moderation'],
   ];
 
+  /**
+   * Maps to the "Form Widget" column of the DEG spreadsheet.
+   */
   const FIELD_FORM_WIDGET = [
     'Textfield' => 'string_textfield',
     'Text area with a summary' => 'text_textarea_with_summary',
