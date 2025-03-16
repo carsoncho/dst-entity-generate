@@ -374,6 +374,7 @@ final class DstegConstants {
     'Link' => 'link_default',
     'Paragraphs (stable)' => 'paragraphs',
     'Media library' => 'media_library_widget',
+    'Smart Date' => 'smartdate_default'
   ];
 
 }
