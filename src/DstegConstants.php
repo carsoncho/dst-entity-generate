@@ -267,6 +267,14 @@ final class DstegConstants {
         ],
       ],
     ],
+    'Smart Date' => [
+      'type' => 'smartdate',
+      'dependencies' => [
+        'required' => [
+          'module' => 'smart_date',
+        ]
+      ]
+    ]
   ];
   const ENTITY_TYPE_MAPPING = [
     'Vocabulary' => [
